@@ -1,0 +1,1795 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Resume Screener (Standalone)</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        :root {
+            --primary: #4361ee;
+            --secondary: #3f37c9;
+            --accent: #4895ef;
+            --light: #f8f9ff;
+            --dark: #1a1a2e;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--light);
+            color: var(--dark);
+        }
+        
+        .file-upload-area {
+            border: 2px dashed var(--primary);
+            border-radius: 15px;
+            padding: 2rem;
+            text-align: center;
+            background-color: rgba(67, 97, 238, 0.05);
+        }
+        
+        .skill-badge {
+            background-color: rgba(67, 97, 238, 0.1);
+            color: var(--primary);
+            padding: 5px 10px;
+            border-radius: 20px;
+            margin-right: 5px;
+            margin-bottom: 5px;
+            display: inline-block;
+        }
+        
+        .cover-letter {
+            background-color: #f8f9fa;
+            border-left: 4px solid var(--primary);
+            padding: 15px;
+            border-radius: 0 8px 8px 0;
+            margin-top: 15px;
+            white-space: pre-wrap;
+        }
+        
+        .job-template-btn {
+            margin: 2px;
+        }
+        
+        .template-section {
+            margin-bottom: 15px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container my-5">
+        <div class="card shadow">
+            <div class="card-header bg-primary text-white">
+                <h1 class="h3 mb-0"><i class="fas fa-user-tie me-2"></i> AI Resume Screener</h1>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="mb-3">
+                            <label class="form-label">Job Description</label>
+                            <textarea id="jobDesc" class="form-control" rows="8" placeholder="Paste job description here..."></textarea>
+                            
+                            <div class="template-section mt-2">
+                                <small class="text-muted">Quick templates:</small>
+                                <div>
+                                    <button class="btn btn-sm btn-outline-primary job-template-btn" data-template="software">Software</button>
+                                    <button class="btn btn-sm btn-outline-primary job-template-btn" data-template="marketing">Marketing</button>
+                                    <button class="btn btn-sm btn-outline-primary job-template-btn" data-template="healthcare">Healthcare</button>
+                                    <button class="btn btn-sm btn-outline-primary job-template-btn" data-template="finance">Finance</button>
+                                    <button class="btn btn-sm btn-outline-primary job-template-btn" data-template="education">Education</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="mb-3">
+                            <label class="form-label">Upload Resumes (PDF/TXT)</label>
+                            <div class="file-upload-area" id="dropZone">
+                                <i class="fas fa-cloud-upload-alt fa-3x mb-3"></i>
+                                <h5>Drag & Drop Files Here</h5>
+                                <p class="text-muted">or click to browse</p>
+                                <input type="file" id="fileInput" multiple accept=".pdf,.txt" style="display: none;">
+                            </div>
+                            <div id="filePreview" class="mt-3"></div>
+                        </div>
+                    </div>
+                </div>
+                <button id="processBtn" class="btn btn-primary w-100">
+                    <i class="fas fa-cog me-2"></i> Process Resumes
+                </button>
+            </div>
+        </div>
+        
+        <div id="results" class="mt-4" style="display: none;">
+            <div class="card shadow">
+                <div class="card-header bg-success text-white">
+                    <h2 class="h4 mb-0"><i class="fas fa-chart-bar me-2"></i> Results</h2>
+                </div>
+                <div class="card-body">
+                    <div id="topCandidate" class="card mb-3 bg-light">
+                        <!-- Top candidate will be shown here -->
+                    </div>
+                    <div id="candidatesList" class="row">
+                        <!-- All candidates will be listed here -->
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@2.10.377/build/pdf.min.js"></script>
+    <script>
+        // Initialize PDF.js worker
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@2.10.377/build/pdf.worker.min.js';
+
+        // Enhanced skills database for multiple industries
+        const SKILLS_DATABASE = {
+            technical: [
+                'python', 'java', 'javascript', 'typescript', 'c++', 'c#', 'go', 'rust',
+                'swift', 'kotlin', 'sql', 'nosql', 'mongodb', 'postgresql', 'mysql',
+                'html', 'css', 'react', 'angular', 'vue', 'django', 'flask', 'node.js',
+                'git', 'docker', 'kubernetes', 'aws', 'azure', 'gcp', 'machine learning',
+                'data science', 'pandas', 'numpy', 'tensorflow', 'pytorch', 'algorithms',
+                'data structures', 'rest api', 'microservices', 'devops', 'ci/cd'
+            ],
+            marketing: [
+                'seo', 'sem', 'ppc', 'google analytics', 'google ads', 'social media',
+                'content marketing', 'email marketing', 'copywriting', 'branding',
+                'market research', 'digital strategy', 'conversion optimization',
+                'google tag manager', 'facebook ads', 'instagram marketing',
+                'linkedin marketing', 'twitter marketing', 'seo', 'sem', 'cro'
+            ],
+            healthcare: [
+                'patient care', 'emr', 'ehr', 'hipaa', 'cpr certified', 'phlebotomy',
+                'medical terminology', 'vital signs', 'medication administration',
+                'nursing', 'patient education', 'clinical research', 'pharmacy',
+                'medical coding', 'icd-10', 'cpt', 'healthcare it', 'telemedicine',
+                'public health', 'healthcare management'
+            ],
+            finance: [
+                'financial analysis', 'accounting', 'quickbooks', 'excel', 'financial modeling',
+                'valuation', 'investment banking', 'private equity', 'venture capital',
+                'portfolio management', 'risk management', 'fraud detection', 'auditing',
+                'tax preparation', 'gaap', 'ifrs', 'cpa', 'cfa', 'frm', 'fintech', 'blockchain'
+            ],
+            education: [
+                'lesson planning', 'curriculum development', 'classroom management',
+                'student assessment', 'special education', 'differentiated instruction',
+                'educational technology', 'google classroom', 'zoom teaching',
+                'student engagement', 'parent communication', 'iep', 'ell', 'esl',
+                'literacy', 'numeracy', 'stem education', 'montessori', 'ib', 'ap'
+            ]
+        };
+
+        // Job description templates
+        const JOB_TEMPLATES = {
+            software: `Software Engineer Position
+
+Requirements:
+- Bachelor's degree in Computer Science or related field
+- 3+ years of professional software development experience
+- Proficiency in JavaScript, Python, or Java
+- Experience with modern frameworks like React or Node.js
+- Strong understanding of data structures and algorithms
+
+Responsibilities:
+- Develop and maintain web applications
+- Write clean, maintainable, and efficient code
+- Collaborate with cross-functional teams
+- Participate in code reviews
+- Troubleshoot and debug applications`,
+
+            marketing: `Marketing Manager
+
+Qualifications:
+- 5+ years of digital marketing experience
+- Bachelor's degree in Marketing, Communications or related field
+- Proven experience with SEO/SEM and Google Analytics
+- Excellent written and verbal communication skills
+- Strong project management skills
+
+Key Responsibilities:
+- Develop and execute marketing strategies
+- Manage digital marketing campaigns
+- Analyze market trends and competitors
+- Lead a team of marketing professionals
+- Coordinate with sales and product teams`,
+
+            healthcare: `Registered Nurse
+
+Requirements:
+- Active RN license in [State]
+- BSN degree preferred
+- 2+ years of clinical experience
+- BLS and ACLS certification
+- Excellent patient care skills
+
+Duties:
+- Provide direct patient care
+- Administer medications and treatments
+- Monitor patient conditions
+- Collaborate with healthcare team
+- Educate patients and families`,
+
+            finance: `Financial Analyst
+
+Qualifications:
+- Bachelor's degree in Finance, Accounting or related field
+- 2+ years of financial analysis experience
+- Strong Excel and financial modeling skills
+- Knowledge of GAAP and financial reporting
+- Excellent analytical and problem-solving skills
+
+Responsibilities:
+- Prepare financial reports and forecasts
+- Analyze financial data
+- Identify trends and recommend improvements
+- Support budgeting and forecasting
+- Assist with financial audits`,
+
+            education: `High School Teacher
+
+Requirements:
+- Bachelor's degree in Education or related field
+- State teaching certification
+- 2+ years of classroom experience
+- Strong classroom management skills
+- Excellent communication skills
+
+Responsibilities:
+- Develop lesson plans and curriculum
+- Deliver engaging instruction
+- Assess student progress
+- Maintain classroom discipline
+- Communicate with parents`
+        };
+
+        // DOM elements
+        const dropZone = document.getElementById('dropZone');
+        const fileInput = document.getElementById('fileInput');
+        const filePreview = document.getElementById('filePreview');
+        const jobDescTextarea = document.getElementById('jobDesc');
+        const processBtn = document.getElementById('processBtn');
+        const resultsDiv = document.getElementById('results');
+        const topCandidateDiv = document.getElementById('topCandidate');
+        const candidatesListDiv = document.getElementById('candidatesList');
+
+        // Set up job template buttons
+        document.querySelectorAll('.job-template-btn').forEach(btn => {
+            btn.addEventListener('click', function() {
+                jobDescTextarea.value = JOB_TEMPLATES[this.dataset.template];
+            });
+        });
+
+        // File handling
+        dropZone.addEventListener('click', () => fileInput.click());
+        
+        ['dragover', 'dragleave', 'drop'].forEach(event => {
+            dropZone.addEventListener(event, (e) => {
+                e.preventDefault();
+                dropZone.style.backgroundColor = event === 'dragover' 
+                    ? 'rgba(67, 97, 238, 0.1)' 
+                    : 'rgba(67, 97, 238, 0.05)';
+                
+                if (event === 'drop') {
+                    fileInput.files = e.dataTransfer.files;
+                    updateFilePreview();
+                }
+            });
+        });
+
+        fileInput.addEventListener('change', updateFilePreview);
+
+        function updateFilePreview() {
+            filePreview.innerHTML = '';
+            if (!fileInput.files.length) return;
+            
+            const list = document.createElement('div');
+            list.className = 'list-group';
+            
+            Array.from(fileInput.files).forEach((file, i) => {
+                const item = document.createElement('div');
+                item.className = 'list-group-item d-flex justify-content-between align-items-center';
+                item.innerHTML = `
+                    <div>
+                        <i class="${file.type === 'application/pdf' ? 'fas fa-file-pdf text-danger' : 'fas fa-file-alt text-primary'} me-2"></i>
+                        ${file.name}
+                    </div>
+                    <button class="btn btn-sm btn-outline-danger" data-index="${i}">
+                        <i class="fas fa-times"></i>
+                    </button>
+                `;
+                list.appendChild(item);
+            });
+            
+            filePreview.appendChild(list);
+            
+            // Add remove file functionality
+            filePreview.querySelectorAll('button').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    const files = Array.from(fileInput.files);
+                    files.splice(parseInt(e.target.closest('button').dataset.index), 1);
+                    
+                    const dataTransfer = new DataTransfer();
+                    files.forEach(file => dataTransfer.items.add(file));
+                    fileInput.files = dataTransfer.files;
+                    updateFilePreview();
+                });
+            });
+        }
+
+        // Text processing
+        async function extractTextFromFile(file) {
+            if (file.type === 'text/plain') {
+                return await file.text();
+            } else if (file.type === 'application/pdf') {
+                const arrayBuffer = await file.arrayBuffer();
+                const pdf = await pdfjsLib.getDocument(arrayBuffer).promise;
+                let text = '';
+                
+                for (let i = 1; i <= pdf.numPages; i++) {
+                    const page = await pdf.getPage(i);
+                    const content = await page.getTextContent();
+                    text += content.items.map(item => item.str).join(' ') + '\n';
+                }
+                
+                return text;
+            }
+            return '';
+        }
+
+        function extractSkills(text) {
+            text = text.toLowerCase();
+            const foundSkills = new Set();
+            
+            // Check all skill categories
+            Object.values(SKILLS_DATABASE).forEach(category => {
+                category.forEach(skill => {
+                    if (text.includes(skill.toLowerCase())) {
+                        foundSkills.add(skill);
+                    }
+                });
+            });
+            
+            return Array.from(foundSkills);
+        }
+
+        function calculateSimilarity(jobDesc, resumeText) {
+            const jobWords = new Set(jobDesc.toLowerCase().split(/\s+/));
+            const resumeWords = new Set(resumeText.toLowerCase().split(/\s+/));
+            
+            const intersection = new Set([...jobWords].filter(x => resumeWords.has(x)));
+            const union = new Set([...jobWords, ...resumeWords]);
+            
+            // Basic score (0-1)
+            let score = intersection.size / union.size;
+            
+            // Bonus for matching important keywords
+            const importantKeywords = ['experience', 'skills', 'proficient', 'expert', 'certified'];
+            importantKeywords.forEach(word => {
+                if (resumeWords.has(word) && jobWords.has(word)) {
+                    score += 0.05;
+                }
+            });
+            
+            return Math.min(1, score); // Cap at 1
+        }
+
+        // Main processing
+        processBtn.addEventListener('click', async function() {
+            const jobDesc = jobDescTextarea.value;
+            const files = fileInput.files;
+            
+            if (!jobDesc || !files.length) {
+                alert('Please enter a job description and upload at least one resume');
+                return;
+            }
+            
+            this.disabled = true;
+            this.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i> Processing...';
+            
+            try {
+                const results = [];
+                
+                // Process each file
+                for (let i = 0; i < files.length; i++) {
+                    const file = files[i];
+                    const text = await extractTextFromFile(file);
+                    
+                    if (text) {
+                        const skills = extractSkills(text);
+                        const score = calculateSimilarity(jobDesc, text);
+                        
+                        results.push({
+                            filename: file.name,
+                            score: score,
+                            skills: skills,
+                            text: text
+                        });
+                    }
+                }
+                
+                // Sort by score
+                results.sort((a, b) => b.score - a.score);
+                displayResults(results, jobDesc);
+                
+            } catch (error) {
+                console.error(error);
+                alert('Error processing files: ' + error.message);
+            } finally {
+                this.disabled = false;
+                this.innerHTML = '<i class="fas fa-cog me-2"></i> Process Resumes';
+            }
+        });
+
+        function displayResults(candidates, jobDesc) {
+            resultsDiv.style.display = 'block';
+            candidatesListDiv.innerHTML = '';
+            
+            if (candidates.length === 0) {
+                topCandidateDiv.innerHTML = '<div class="card-body">No valid resumes found</div>';
+                return;
+            }
+            
+            // Show top candidate
+            const top = candidates[0];
+            topCandidateDiv.innerHTML = `
+                <div class="card-body">
+                    <h3 class="h5"><i class="fas fa-crown text-warning me-2"></i> ${top.filename}</h3>
+                    <div class="progress mb-2">
+                        <div class="progress-bar bg-success" style="width: ${top.score * 100}%"></div>
+                    </div>
+                    <p>Match Score: <strong>${(top.score * 100).toFixed(1)}%</strong></p>
+                    <div class="mb-2">
+                        <strong>Skills:</strong>
+                        ${top.skills.map(skill => `<span class="skill-badge">${skill}</span>`).join('')}
+                    </div>
+                    <button class="btn btn-sm btn-outline-primary generate-cl" data-index="0">
+                        <i class="fas fa-envelope me-2"></i> Generate Cover Letter
+                    </button>
+                    <div class="cover-letter mt-3" id="cl-0" style="display: none;"></div>
+                </div>
+            `;
+            
+            // Show all candidates
+            candidates.forEach((candidate, i) => {
+                const col = document.createElement('div');
+                col.className = 'col-md-6 col-lg-4 mb-3';
+                col.innerHTML = `
+                    <div class="card h-100">
+                        <div class="card-body">
+                            <h4 class="h6">${candidate.filename}</h4>
+                            <div class="progress mb-2">
+                                <div class="progress-bar" style="width: ${candidate.score * 100}%"></div>
+                            </div>
+                            <p>Score: <strong>${(candidate.score * 100).toFixed(1)}%</strong></p>
+                            <div class="mb-2">
+                                <strong>Skills:</strong>
+                                ${candidate.skills.slice(0, 5).map(skill => `<span class="skill-badge">${skill}</span>`).join('')}
+                            </div>
+                            <button class="btn btn-sm btn-outline-primary generate-cl" data-index="${i}">
+                                <i class="fas fa-envelope me-2"></i> Generate Cover Letter
+                            </button>
+                            <div class="cover-letter mt-3" id="cl-${i}" style="display: none;"></div>
+                        </div>
+                    </div>
+                `;
+                candidatesListDiv.appendChild(col);
+            });
+            
+            // Add cover letter generation
+            document.querySelectorAll('.generate-cl').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    const index = this.dataset.index;
+                    const candidate = candidates[index];
+                    const clDiv = document.getElementById(`cl-${index}`);
+                    
+                    if (clDiv.style.display === 'none') {
+                        this.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i> Generating...';
+                        
+                        setTimeout(() => {
+                            const coverLetter = generateCoverLetter(candidate, jobDesc);
+                            clDiv.innerHTML = `
+                                <div class="p-3 bg-light rounded">
+                                    <pre>${coverLetter}</pre>
+                                    <button class="btn btn-sm btn-outline-secondary mt-2 copy-cl" data-text="${encodeURIComponent(coverLetter)}">
+                                        <i class="fas fa-copy me-2"></i> Copy to Clipboard
+                                    </button>
+                                </div>
+                            `;
+                            clDiv.style.display = 'block';
+                            this.innerHTML = '<i class="fas fa-envelope me-2"></i> Hide Cover Letter';
+                            
+                            // Add copy functionality
+                            clDiv.querySelector('.copy-cl').addEventListener('click', function() {
+                                const text = decodeURIComponent(this.dataset.text);
+                                navigator.clipboard.writeText(text).then(() => {
+                                    this.innerHTML = '<i class="fas fa-check me-2"></i> Copied!';
+                                    setTimeout(() => {
+                                        this.innerHTML = '<i class="fas fa-copy me-2"></i> Copy to Clipboard';
+                                    }, 2000);
+                                });
+                            });
+                        }, 1000);
+                    } else {
+                        clDiv.style.display = 'none';
+                        this.innerHTML = '<i class="fas fa-envelope me-2"></i> Generate Cover Letter';
+                    }
+                });
+            });
+        }
+
+        function generateCoverLetter(candidate, jobDesc) {
+            // Extract candidate name from filename (simple heuristic)
+            const name = candidate.filename.split('_')[0] || 'Candidate';
+            const topSkills = candidate.skills.slice(0, 3).join(', ');
+            
+            // Extract job title from description (first line)
+            const jobTitle = jobDesc.split('\n')[0] || 'the position';
+            
+            return `Dear Hiring Manager,
+
+I am excited to apply for ${jobTitle}. My experience with ${topSkills} makes me a strong candidate for this role.
+
+In my previous positions, I've successfully:
+- Applied ${candidate.skills[0]} to solve complex problems
+- Collaborated using ${candidate.skills[1]}
+- Developed expertise in ${candidate.skills[2]}
+
+I'm particularly drawn to this opportunity because it aligns perfectly with my skills and experience. I would welcome the chance to discuss how I can contribute to your team.
+
+Sincerely,
+${name}`;
+        }
+    </script>
+</body>
+</html><!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="AI-powered resume screening tool for efficient candidate matching">
+    <title>AI Resume Screener Pro | Smart Candidate Matching</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/4.1.1/animate.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        :root {
+            --primary: #4361ee;
+            --secondary: #3f37c9;
+            --accent: #4895ef;
+            --light: #f8f9ff;
+            --dark: #1a1a2e;
+        }
+        
+        body {
+            background-color: var(--light);
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            color: var(--dark);
+            line-height: 1.6;
+            transition: all 0.3s ease;
+        }
+        
+        .hero-section {
+            background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
+            color: white;
+            padding: 4rem 0;
+            border-radius: 0 0 20px 20px;
+            margin-bottom: 3rem;
+            box-shadow: 0 10px 20px rgba(0,0,0,0.1);
+        }
+        
+        .card {
+            border: none;
+            border-radius: 15px;
+            box-shadow: 0 8px 20px rgba(0,0,0,0.08);
+            transition: all 0.3s ease;
+            margin-bottom: 25px;
+            overflow: hidden;
+        }
+        
+        .card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 12px 25px rgba(0,0,0,0.15);
+        }
+        
+        .feature-card {
+            text-align: center;
+            padding: 2rem 1rem;
+            border-top: 5px solid var(--accent);
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+        }
+        
+        .feature-card h3 {
+            margin-bottom: 1rem;
+            min-height: 3rem;
+        }
+        
+        .feature-card p {
+            margin-top: auto;
+            margin-bottom: 0;
+        }
+        
+        .feature-icon {
+            font-size: 2.5rem;
+            color: var(--primary);
+            margin-bottom: 1.5rem;
+        }
+        
+        .progress {
+            height: 12px;
+            border-radius: 10px;
+            margin: 15px 0;
+        }
+        
+        .progress-bar {
+            background: linear-gradient(90deg, var(--primary) 0%, var(--accent) 100%);
+        }
+        
+        .skill-badge {
+            margin-right: 8px;
+            margin-bottom: 8px;
+            padding: 8px 15px;
+            border-radius: 20px;
+            background-color: rgba(67, 97, 238, 0.1);
+            color: var(--primary);
+            font-weight: 500;
+            display: inline-block;
+        }
+        
+        .form-control, .form-select {
+            border-radius: 10px;
+            padding: 12px 15px;
+            border: 2px solid #e9ecef;
+        }
+        
+        .form-control:focus, .form-select:focus {
+            border-color: var(--accent);
+            box-shadow: 0 0 0 0.25rem rgba(67, 97, 238, 0.25);
+        }
+        
+        .btn-primary {
+            background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
+            border: none;
+            padding: 12px 30px;
+            border-radius: 10px;
+            font-weight: 600;
+            letter-spacing: 0.5px;
+            text-transform: uppercase;
+            transition: all 0.3s ease;
+        }
+        
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 15px rgba(67, 97, 238, 0.3);
+        }
+        
+        .file-upload-area {
+            border: 2px dashed var(--primary);
+            border-radius: 15px;
+            padding: 2rem;
+            text-align: center;
+            background-color: rgba(67, 97, 238, 0.05);
+            transition: all 0.3s ease;
+            cursor: pointer;
+        }
+        
+        .file-upload-area:hover {
+            background-color: rgba(67, 97, 238, 0.1);
+        }
+        
+        .candidate-card {
+            border-left: 4px solid var(--primary);
+            transition: all 0.3s ease;
+        }
+        
+        .candidate-card:hover {
+            border-left-width: 8px;
+        }
+        
+        .top-candidate {
+            background: linear-gradient(135deg, rgba(67, 97, 238, 0.1) 0%, rgba(72, 149, 239, 0.1) 100%);
+            border: 2px solid var(--accent);
+        }
+        
+        .floating {
+            animation: floating 3s ease-in-out infinite;
+        }
+        
+        .pulse {
+            animation: pulse 2s infinite;
+        }
+        
+        .animation-delay-100ms {
+            animation-delay: 0.1s;
+        }
+        
+        .confetti {
+            position: fixed;
+            width: 10px;
+            height: 10px;
+            background-color: var(--accent);
+            opacity: 0;
+            z-index: 9999;
+            animation: confetti 5s ease-out;
+        }
+
+        /* Cover Letter Styles */
+        .cover-letter-container {
+            margin-top: 20px;
+            border-top: 1px solid #eee;
+            padding-top: 20px;
+        }
+        
+        .cover-letter {
+            background-color: #f8f9fa;
+            border-left: 4px solid var(--primary);
+            padding: 20px;
+            border-radius: 0 8px 8px 0;
+            margin: 15px 0;
+            white-space: pre-wrap;
+        }
+        
+        .cover-letter-actions {
+            display: flex;
+            gap: 10px;
+            margin-top: 15px;
+        }
+        
+        .cover-letter-toggle {
+            background: none;
+            border: none;
+            color: var(--primary);
+            cursor: pointer;
+            font-weight: 600;
+            padding: 0;
+        }
+        
+        .cover-letter-toggle:hover {
+            text-decoration: underline;
+        }
+        
+        .cover-letter-loading {
+            text-align: center;
+            padding: 20px;
+            color: var(--primary);
+        }
+        
+        .spinner {
+            animation: spin 1s linear infinite;
+            display: inline-block;
+        }
+        
+        /* Dark Mode Styles */
+        body.dark-mode {
+            background-color: #121212;
+            color: #f5f5f5;
+        }
+
+        .dark-mode .card {
+            background-color: #1e1e1e;
+            box-shadow: 0 8px 20px rgba(0,0,0,0.3);
+        }
+
+        .dark-mode .hero-section {
+            background: linear-gradient(135deg, #2a3a72 0%, #1a1a2e 100%);
+        }
+
+        .dark-mode .bg-light {
+            background-color: #1e1e1e !important;
+        }
+
+        .dark-mode .text-muted {
+            color: #aaa !important;
+        }
+
+        .dark-mode .form-control, 
+        .dark-mode .form-select {
+            background-color: #2d2d2d;
+            border-color: #444;
+            color: #f5f5f5;
+        }
+
+        .dark-mode .file-upload-area {
+            background-color: rgba(67, 97, 238, 0.1);
+            border-color: var(--accent);
+        }
+
+        .dark-mode .skill-badge {
+            background-color: rgba(67, 97, 238, 0.2);
+        }
+
+        .dark-mode .cover-letter {
+            background-color: #2d2d2d;
+            color: #f5f5f5;
+        }
+
+        .dark-mode-toggle {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            z-index: 1000;
+        }
+
+        .dark-mode-toggle .form-check-label {
+            cursor: pointer;
+            font-size: 1.25rem;
+            color: white;
+        }
+
+        .dark-mode .dark-mode-toggle .form-check-label {
+            color: var(--accent);
+        }
+        
+        @keyframes floating {
+            0% { transform: translateY(0px); }
+            50% { transform: translateY(-10px); }
+            100% { transform: translateY(0px); }
+        }
+        
+        @keyframes pulse {
+            0% { box-shadow: 0 0 0 0 rgba(67, 97, 238, 0.4); }
+            70% { box-shadow: 0 0 0 15px rgba(67, 97, 238, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(67, 97, 238, 0); }
+        }
+        
+        @keyframes confetti {
+            0% { transform: translateY(0) rotate(0deg); opacity: 1; }
+            100% { transform: translateY(100vh) rotate(720deg); opacity: 0; }
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .sr-only {
+            position: absolute;
+            width: 1px;
+            height: 1px;
+            padding: 0;
+            margin: -1px;
+            overflow: hidden;
+            clip: rect(0, 0, 0, 0);
+            white-space: nowrap;
+            border-width: 0;
+        }
+    </style>
+</head>
+<body>
+    <!-- Dark Mode Toggle -->
+    <div class="dark-mode-toggle">
+        <div class="form-check form-switch">
+            <input class="form-check-input" type="checkbox" id="darkModeToggle" title="Toggle dark mode">
+            <label class="form-check-label" for="darkModeToggle">
+                <i class="fas fa-moon"></i>
+                <span class="sr-only">Toggle dark mode</span>
+            </label>
+        </div>
+    </div>
+
+    <!-- Hero Section -->
+    <header class="hero-section animate__animated animate__fadeIn" role="banner">
+        <div class="container">
+            <div class="row align-items-center">
+                <div class="col-lg-6">
+                    <h1 class="display-4 fw-bold mb-3">AI Resume Screener Pro <span class="sr-only">:</span> <i class="fas fa-bolt" aria-hidden="true"></i></h1>
+                    <p class="lead mb-4">Smart candidate matching powered by artificial intelligence. Find your perfect hire in minutes, not hours.</p>
+                    <div class="d-flex gap-3">
+                        <button class="btn btn-light btn-lg pulse animate__animated animate__pulse animate__infinite" onclick="showDemoAlert()">
+                            <i class="fas fa-play me-2" aria-hidden="true"></i> Watch Demo
+                        </button>
+                        <button class="btn btn-outline-light btn-lg" onclick="showLearnMoreAlert()">
+                            <i class="fas fa-book me-2" aria-hidden="true"></i> Learn More
+                        </button>
+                    </div>
+                </div>
+                <div class="col-lg-6 d-none d-lg-block">
+                    <img src="https://illustrations.popsy.co/amber/digital-nomad.svg" alt="Illustration of a person reviewing resumes" class="img-fluid floating">
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- How It Works Section -->
+    <section class="container mb-5" aria-labelledby="features-heading">
+        <h2 id="features-heading" class="text-center mb-5">How It Works</h2>
+        <div class="row g-4">
+            <div class="col-md-4">
+                <div class="card feature-card h-100 animate__animated animate__fadeInUp">
+                    <div class="feature-icon">
+                        <i class="fas fa-file-alt" aria-hidden="true"></i>
+                    </div>
+                    <h3>1. Upload Job Description</h3>
+                    <p>Paste your job requirements or upload a description file</p>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card feature-card h-100 animate__animated animate__fadeInUp animate__delay-1s">
+                    <div class="feature-icon">
+                        <i class="fas fa-user-cog" aria-hidden="true"></i>
+                    </div>
+                    <h3>2. Upload Resumes</h3>
+                    <p>Add multiple resumes in PDF or text format</p>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card feature-card h-100 animate__animated animate__fadeInUp animate__delay-2s">
+                    <div class="feature-icon">
+                        <i class="fas fa-chart-bar" aria-hidden="true"></i>
+                    </div>
+                    <h3>3. Get Results</h3>
+                    <p>Receive ranked candidates with match scores instantly</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Main Screening Tool -->
+    <main class="container mb-5" aria-labelledby="screener-heading">
+        <div class="card p-4 p-md-5 animate__animated animate__fadeIn">
+            <h2 id="screener-heading" class="text-center mb-4"><i class="fas fa-magic me-2" aria-hidden="true"></i> Start Screening Now</h2>
+            
+            <form id="screener-form" enctype="multipart/form-data" aria-label="Resume screening form">
+                <div class="row g-4">
+                    <div class="col-lg-6">
+                        <div class="mb-3">
+                            <label for="jobDesc" class="form-label fw-bold">Job Description <span class="text-danger">*</span></label>
+                            <textarea class="form-control" id="jobDesc" rows="8" placeholder="Paste the complete job description here..." required aria-required="true"></textarea>
+                            <div class="form-text">Be as detailed as possible for better matches</div>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label class="form-label fw-bold">Sample Job Descriptions</label>
+                            <div class="d-flex flex-wrap gap-2">
+                                <button type="button" class="btn btn-outline-primary btn-sm job-template-btn" data-template="software">Software Engineer</button>
+                                <button type="button" class="btn btn-outline-primary btn-sm job-template-btn" data-template="marketing">Marketing Manager</button>
+                                <button type="button" class="btn btn-outline-primary btn-sm job-template-btn" data-template="healthcare">Healthcare</button>
+                                <button type="button" class="btn btn-outline-primary btn-sm job-template-btn" data-template="finance">Finance</button>
+                                <button type="button" class="btn btn-outline-primary btn-sm job-template-btn" data-template="education">Education</button>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="col-lg-6">
+                        <div class="mb-3">
+                            <label class="form-label fw-bold">Upload Resumes <span class="text-danger">*</span></label>
+                            <div class="file-upload-area" id="dropZone" role="button" aria-labelledby="upload-instructions">
+                                <i class="fas fa-cloud-upload-alt fa-3x mb-3" aria-hidden="true"></i>
+                                <h5 id="upload-instructions">Drag & Drop Files Here</h5>
+                                <p class="text-muted">or click to browse (PDF, TXT)</p>
+                                <input class="d-none" type="file" id="resumes" multiple accept=".pdf,.txt" required aria-required="true" aria-label="Upload resume files">
+                                <div id="filePreview" class="mt-3" role="region" aria-live="polite"></div>
+                            </div>
+                        </div>
+                        
+                        <div class="d-grid">
+                            <button type="submit" class="btn btn-primary btn-lg">
+                                <span id="submit-text"><i class="fas fa-play me-2" aria-hidden="true"></i> Rank Candidates</span>
+                                <span id="spinner" class="spinner-border spinner-border-sm d-none" role="status" aria-hidden="true">
+                                    <span class="sr-only">Loading...</span>
+                                </span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </main>
+
+    <!-- Results Section -->
+    <section id="results" class="container mb-5" style="display: none;" aria-live="polite" aria-labelledby="results-heading">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h2 id="results-heading"><i class="fas fa-trophy me-2" aria-hidden="true"></i> Top Candidates</h2>
+            <button id="downloadBtn" class="btn btn-outline-primary" aria-label="Download results">
+                <i class="fas fa-download me-2" aria-hidden="true"></i> Export Results
+            </button>
+        </div>
+        
+        <div id="top-candidate" class="card p-4 mb-4 top-candidate animate__animated animate__fadeInDown" role="region" aria-labelledby="top-candidate-heading">
+            <div class="row align-items-center">
+                <div class="col-md-2 text-center">
+                    <div class="bg-primary bg-opacity-10 rounded-circle p-3 d-inline-block">
+                        <i class="fas fa-crown fa-2x" aria-hidden="true"></i>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <h3 id="top-candidate-heading" class="mb-1">No candidate selected</h3>
+                    <div class="progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+                        <div id="top-candidate-progress" class="progress-bar"></div>
+                    </div>
+                    <div id="top-candidate-score" class="fw-bold text-primary">Match Score: 0%</div>
+                </div>
+                <div class="col-md-4">
+                    <div id="top-candidate-skills" class="d-flex flex-wrap"></div>
+                </div>
+            </div>
+        </div>
+        
+        <div id="candidates-list" class="row g-4" role="list"></div>
+    </section>
+
+    <!-- Testimonials -->
+    <section class="bg-light py-5 mt-5" aria-labelledby="testimonials-heading">
+        <div class="container">
+            <h2 id="testimonials-heading" class="text-center mb-5">Trusted by Hiring Teams Worldwide</h2>
+            <div class="row g-4">
+                <div class="col-md-4" role="listitem">
+                    <div class="card p-4 h-100">
+                        <div class="d-flex align-items-center mb-3">
+                            <img src="https://randomuser.me/api/portraits/women/32.jpg" class="rounded-circle me-3" width="60" alt="Portrait of Sarah Johnson">
+                            <div>
+                                <h3 class="mb-0 h5">Sarah Johnson</h3>
+                                <small class="text-muted">HR Director, TechCorp</small>
+                            </div>
+                        </div>
+                        <p>"This tool cut our screening time by 80% and helped us find candidates we would have otherwise missed."</p>
+                        <div class="text-warning" aria-label="5 star rating">
+                            <i class="fas fa-star" aria-hidden="true"></i>
+                            <i class="fas fa-star" aria-hidden="true"></i>
+                            <i class="fas fa-star" aria-hidden="true"></i>
+                            <i class="fas fa-star" aria-hidden="true"></i>
+                            <i class="fas fa-star" aria-hidden="true"></i>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-4" role="listitem">
+                    <div class="card p-4 h-100">
+                        <div class="d-flex align-items-center mb-3">
+                            <img src="https://randomuser.me/api/portraits/men/45.jpg" class="rounded-circle me-3" width="60" alt="Portrait of Michael Chen">
+                            <div>
+                                <h3 class="mb-0 h5">Michael Chen</h3>
+                                <small class="text-muted">Recruitment Lead, StartupX</small>
+                            </div>
+                        </div>
+                        <p>"The AI matching is scarily accurate. We've hired 3 excellent candidates through this system already."</p>
+                        <div class="text-warning" aria-label="4.5 star rating">
+                            <i class="fas fa-star" aria-hidden="true"></i>
+                            <i class="fas fa-star" aria-hidden="true"></i>
+                            <i class="fas fa-star" aria-hidden="true"></i>
+                            <i class="fas fa-star" aria-hidden="true"></i>
+                            <i class="fas fa-star-half-alt" aria-hidden="true"></i>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-4" role="listitem">
+                    <div class="card p-4 h-100">
+                        <div class="d-flex align-items-center mb-3">
+                            <img src="https://randomuser.me/api/portraits/women/68.jpg" class="rounded-circle me-3" width="60" alt="Portrait of Emma Rodriguez">
+                            <div>
+                                <h3 class="mb-0 h5">Emma Rodriguez</h3>
+                                <small class="text-muted">Talent Acquisition, GlobalSoft</small>
+                            </div>
+                        </div>
+                        <p>"What used to take our team a week now takes an afternoon. The ROI is incredible."</p>
+                        <div class="text-warning" aria-label="5 star rating">
+                            <i class="fas fa-star" aria-hidden="true"></i>
+                            <i class="fas fa-star" aria-hidden="true"></i>
+                            <i class="fas fa-star" aria-hidden="true"></i>
+                            <i class="fas fa-star" aria-hidden="true"></i>
+                            <i class="fas fa-star" aria-hidden="true"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="bg-dark text-white py-5" role="contentinfo">
+        <div class="container">
+            <div class="row">
+                <div class="col-lg-4 mb-4 mb-lg-0">
+                    <h2 class="h4">AI Resume Screener Pro</h2>
+                    <p>Revolutionizing recruitment with artificial intelligence and machine learning.</p>
+                    <div class="d-flex gap-3">
+                        <a href="#" class="text-white" aria-label="Twitter"><i class="fab fa-twitter fa-lg" aria-hidden="true"></i></a>
+                        <a href="#" class="text-white" aria-label="LinkedIn"><i class="fab fa-linkedin fa-lg" aria-hidden="true"></i></a>
+                        <a href="#" class="text-white" aria-label="GitHub"><i class="fab fa-github fa-lg" aria-hidden="true"></i></a>
+                    </div>
+                </div>
+                <div class="col-lg-2 col-md-4 mb-4 mb-md-0">
+                    <h3 class="h5">Product</h3>
+                    <ul class="list-unstyled">
+                        <li class="mb-2"><a href="#" class="text-white-50">Features</a></li>
+                        <li class="mb-2"><a href="#" class="text-white-50">Pricing</a></li>
+                        <li class="mb-2"><a href="#" class="text-white-50">API</a></li>
+                        <li class="mb-2"><a href="#" class="text-white-50">Integrations</a></li>
+                    </ul>
+                </div>
+                <div class="col-lg-2 col-md-4 mb-4 mb-md-0">
+                    <h3 class="h5">Resources</h3>
+                    <ul class="list-unstyled">
+                        <li class="mb-2"><a href="#" class="text-white-50">Documentation</a></li>
+                        <li class="mb-2"><a href="#" class="text-white-50">Blog</a></li>
+                        <li class="mb-2"><a href="#" class="text-white-50">Guides</a></li>
+                        <li class="mb-2"><a href="#" class="text-white-50">Support</a></li>
+                    </ul>
+                </div>
+                <div class="col-lg-2 col-md-4 mb-4 mb-md-0">
+                    <h3 class="h5">Company</h3>
+                    <ul class="list-unstyled">
+                        <li class="mb-2"><a href="#" class="text-white-50">About</a></li>
+                        <li class="mb-2"><a href="#" class="text-white-50">Careers</a></li>
+                        <li class="mb-2"><a href="#" class="text-white-50">Privacy</a></li>
+                        <li class="mb-2"><a href="#" class="text-white-50">Terms</a></li>
+                    </ul>
+                </div>
+                <div class="col-lg-2 col-md-4">
+                    <h3 class="h5">Contact</h3>
+                    <address class="list-unstyled">
+                        <li class="mb-2"><i class="fas fa-envelope me-2" aria-hidden="true"></i> hello@resume-screener.com</li>
+                        <li class="mb-2"><i class="fas fa-phone me-2" aria-hidden="true"></i> (123) 456-7890</li>
+                        <li class="mb-2"><i class="fas fa-map-marker-alt me-2" aria-hidden="true"></i> San Francisco, CA</li>
+                    </address>
+                </div>
+            </div>
+            <hr class="my-4 bg-secondary">
+            <div class="text-center text-white-50">
+                <small>© 2023 AI Resume Screener Pro. All rights reserved.</small>
+            </div>
+        </div>
+    </footer>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@2.10.377/build/pdf.min.js"></script>
+    <script>
+        // Initialize PDF.js worker
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@2.10.377/build/pdf.worker.min.js';
+
+        // Enhanced skills database for multiple industries
+        const SKILLS_DATABASE = {
+            technical: [
+                'python', 'java', 'javascript', 'typescript', 'c++', 'c#', 'go', 'rust',
+                'swift', 'kotlin', 'sql', 'nosql', 'mongodb', 'postgresql', 'mysql',
+                'html', 'css', 'react', 'angular', 'vue', 'django', 'flask', 'node.js',
+                'git', 'docker', 'kubernetes', 'aws', 'azure', 'gcp', 'machine learning',
+                'data science', 'pandas', 'numpy', 'tensorflow', 'pytorch', 'algorithms',
+                'data structures', 'rest api', 'microservices', 'devops', 'ci/cd'
+            ],
+            marketing: [
+                'seo', 'sem', 'ppc', 'google analytics', 'google ads', 'social media',
+                'content marketing', 'email marketing', 'copywriting', 'branding',
+                'market research', 'digital strategy', 'conversion optimization',
+                'google tag manager', 'facebook ads', 'instagram marketing',
+                'linkedin marketing', 'twitter marketing', 'seo', 'sem', 'cro'
+            ],
+            healthcare: [
+                'patient care', 'emr', 'ehr', 'hipaa', 'cpr certified', 'phlebotomy',
+                'medical terminology', 'vital signs', 'medication administration',
+                'nursing', 'patient education', 'clinical research', 'pharmacy',
+                'medical coding', 'icd-10', 'cpt', 'healthcare it', 'telemedicine',
+                'public health', 'healthcare management'
+            ],
+            finance: [
+                'financial analysis', 'accounting', 'quickbooks', 'excel', 'financial modeling',
+                'valuation', 'investment banking', 'private equity', 'venture capital',
+                'portfolio management', 'risk management', 'fraud detection', 'auditing',
+                'tax preparation', 'gaap', 'ifrs', 'cpa', 'cfa', 'frm', 'fintech', 'blockchain'
+            ],
+            education: [
+                'lesson planning', 'curriculum development', 'classroom management',
+                'student assessment', 'special education', 'differentiated instruction',
+                'educational technology', 'google classroom', 'zoom teaching',
+                'student engagement', 'parent communication', 'iep', 'ell', 'esl',
+                'literacy', 'numeracy', 'stem education', 'montessori', 'ib', 'ap'
+            ]
+        };
+
+        // Job description templates
+        const JOB_TEMPLATES = {
+            software: `Software Engineer Position
+
+Requirements:
+- Bachelor's degree in Computer Science or related field
+- 3+ years of professional software development experience
+- Proficiency in JavaScript, Python, or Java
+- Experience with modern frameworks like React or Node.js
+- Strong understanding of data structures and algorithms
+
+Responsibilities:
+- Develop and maintain web applications
+- Write clean, maintainable, and efficient code
+- Collaborate with cross-functional teams
+- Participate in code reviews
+- Troubleshoot and debug applications`,
+
+            marketing: `Marketing Manager
+
+Qualifications:
+- 5+ years of digital marketing experience
+- Bachelor's degree in Marketing, Communications or related field
+- Proven experience with SEO/SEM and Google Analytics
+- Excellent written and verbal communication skills
+- Strong project management skills
+
+Key Responsibilities:
+- Develop and execute marketing strategies
+- Manage digital marketing campaigns
+- Analyze market trends and competitors
+- Lead a team of marketing professionals
+- Coordinate with sales and product teams`,
+
+            healthcare: `Registered Nurse
+
+Requirements:
+- Active RN license in [State]
+- BSN degree preferred
+- 2+ years of clinical experience
+- BLS and ACLS certification
+- Excellent patient care skills
+
+Duties:
+- Provide direct patient care
+- Administer medications and treatments
+- Monitor patient conditions
+- Collaborate with healthcare team
+- Educate patients and families`,
+
+            finance: `Financial Analyst
+
+Qualifications:
+- Bachelor's degree in Finance, Accounting or related field
+- 2+ years of financial analysis experience
+- Strong Excel and financial modeling skills
+- Knowledge of GAAP and financial reporting
+- Excellent analytical and problem-solving skills
+
+Responsibilities:
+- Prepare financial reports and forecasts
+- Analyze financial data
+- Identify trends and recommend improvements
+- Support budgeting and forecasting
+- Assist with financial audits`,
+
+            education: `High School Teacher
+
+Requirements:
+- Bachelor's degree in Education or related field
+- State teaching certification
+- 2+ years of classroom experience
+- Strong classroom management skills
+- Excellent communication skills
+
+Responsibilities:
+- Develop lesson plans and curriculum
+- Deliver engaging instruction
+- Assess student progress
+- Maintain classroom discipline
+- Communicate with parents`
+        };
+
+        // Set up job template buttons
+        document.querySelectorAll('.job-template-btn').forEach(btn => {
+            btn.addEventListener('click', function() {
+                document.getElementById('jobDesc').value = JOB_TEMPLATES[this.dataset.template];
+            });
+        });
+
+        // File upload handling
+        const dropZone = document.getElementById('dropZone');
+        const fileInput = document.getElementById('resumes');
+        const filePreview = document.getElementById('filePreview');
+        
+        dropZone.addEventListener('click', () => fileInput.click());
+        
+        fileInput.addEventListener('change', () => {
+            if (fileInput.files.length > 0) {
+                updateFilePreview();
+            }
+        });
+        
+        // Drag and drop functionality
+        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+            dropZone.addEventListener(eventName, preventDefaults, false);
+        });
+        
+        function preventDefaults(e) {
+            e.preventDefault();
+            e.stopPropagation();
+        }
+        
+        ['dragenter', 'dragover'].forEach(eventName => {
+            dropZone.addEventListener(eventName, highlight, false);
+        });
+        
+        ['dragleave', 'drop'].forEach(eventName => {
+            dropZone.addEventListener(eventName, unhighlight, false);
+        });
+        
+        function highlight() {
+            dropZone.style.backgroundColor = 'rgba(67, 97, 238, 0.2)';
+        }
+        
+        function unhighlight() {
+            dropZone.style.backgroundColor = 'rgba(67, 97, 238, 0.05)';
+        }
+        
+        dropZone.addEventListener('drop', handleDrop, false);
+        
+        function handleDrop(e) {
+            const dt = e.dataTransfer;
+            fileInput.files = dt.files;
+            updateFilePreview();
+        }
+        
+        function updateFilePreview() {
+            filePreview.innerHTML = '';
+            
+            if (fileInput.files.length === 0) {
+                filePreview.innerHTML = '<p class="text-muted">No files selected</p>';
+                return;
+            }
+            
+            const fileList = document.createElement('div');
+            fileList.className = 'list-group';
+            
+            Array.from(fileInput.files).forEach((file, index) => {
+                const fileItem = document.createElement('div');
+                fileItem.className = 'list-group-item list-group-item-action d-flex justify-content-between align-items-center';
+                
+                const fileInfo = document.createElement('div');
+                fileInfo.innerHTML = `
+                    <i class="fas ${file.type === 'application/pdf' ? 'fa-file-pdf text-danger' : 'fa-file-alt text-primary'} me-2" aria-hidden="true"></i>
+                    ${file.name}
+                `;
+                
+                const fileSize = document.createElement('small');
+                fileSize.className = 'text-muted';
+                fileSize.textContent = formatFileSize(file.size);
+                
+                const removeBtn = document.createElement('button');
+                removeBtn.className = 'btn btn-sm btn-outline-danger';
+                removeBtn.innerHTML = '<i class="fas fa-times" aria-hidden="true"></i>';
+                removeBtn.setAttribute('aria-label', `Remove ${file.name}`);
+                removeBtn.onclick = (e) => {
+                    e.stopPropagation();
+                    removeFile(index);
+                };
+                
+                fileItem.appendChild(fileInfo);
+                fileItem.appendChild(fileSize);
+                fileItem.appendChild(removeBtn);
+                fileList.appendChild(fileItem);
+            });
+            
+            filePreview.appendChild(fileList);
+        }
+        
+        function removeFile(index) {
+            const files = Array.from(fileInput.files);
+            files.splice(index, 1);
+            
+            const dataTransfer = new DataTransfer();
+            files.forEach(file => dataTransfer.items.add(file));
+            fileInput.files = dataTransfer.files;
+            
+            updateFilePreview();
+        }
+        
+        function formatFileSize(bytes) {
+            if (bytes === 0) return '0 Bytes';
+            const k = 1024;
+            const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        }
+
+        // Text processing functions
+        async function extractTextFromFile(file) {
+            if (file.type === 'text/plain') {
+                return await file.text();
+            } else if (file.type === 'application/pdf') {
+                const arrayBuffer = await file.arrayBuffer();
+                const pdf = await pdfjsLib.getDocument(arrayBuffer).promise;
+                let text = '';
+                
+                for (let i = 1; i <= pdf.numPages; i++) {
+                    const page = await pdf.getPage(i);
+                    const content = await page.getTextContent();
+                    text += content.items.map(item => item.str).join(' ') + '\n';
+                }
+                
+                return text;
+            }
+            return '';
+        }
+
+        function extractSkills(text) {
+            text = text.toLowerCase();
+            const foundSkills = new Set();
+            
+            // Check all skill categories
+            Object.values(SKILLS_DATABASE).forEach(category => {
+                category.forEach(skill => {
+                    if (text.includes(skill.toLowerCase())) {
+                        foundSkills.add(skill);
+                    }
+                });
+            });
+            
+            return Array.from(foundSkills);
+        }
+
+        function calculateSimilarity(jobDesc, resumeText) {
+            const jobWords = new Set(jobDesc.toLowerCase().split(/\s+/));
+            const resumeWords = new Set(resumeText.toLowerCase().split(/\s+/));
+            
+            const intersection = new Set([...jobWords].filter(x => resumeWords.has(x)));
+            const union = new Set([...jobWords, ...resumeWords]);
+            
+            // Basic score (0-1)
+            let score = intersection.size / union.size;
+            
+            // Bonus for matching important keywords
+            const importantKeywords = ['experience', 'skills', 'proficient', 'expert', 'certified'];
+            importantKeywords.forEach(word => {
+                if (resumeWords.has(word) && jobWords.has(word)) {
+                    score += 0.05;
+                }
+            });
+            
+            return Math.min(1, score); // Cap at 1
+        }
+
+        // Form submission
+        document.getElementById('screener-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const submitBtn = document.getElementById('submit-text');
+            const spinner = document.getElementById('spinner');
+            submitBtn.innerHTML = '<i class="fas fa-cog fa-spin me-2" aria-hidden="true"></i> Processing';
+            spinner.classList.remove('d-none');
+            
+            const jobDesc = document.getElementById('jobDesc').value;
+            const files = document.getElementById('resumes').files;
+            
+            if (!jobDesc || files.length === 0) {
+                alert('Please enter a job description and upload at least one resume');
+                submitBtn.innerHTML = '<i class="fas fa-play me-2" aria-hidden="true"></i> Rank Candidates';
+                spinner.classList.add('d-none');
+                return;
+            }
+            
+            try {
+                const results = [];
+                
+                // Process each file
+                for (let i = 0; i < files.length; i++) {
+                    const file = files[i];
+                    const text = await extractTextFromFile(file);
+                    
+                    if (text) {
+                        const skills = extractSkills(text);
+                        const score = calculateSimilarity(jobDesc, text);
+                        
+                        results.push({
+                            filename: file.name,
+                            score: score,
+                            skills: skills,
+                            text: text
+                        });
+                    }
+                }
+                
+                // Sort by score
+                results.sort((a, b) => b.score - a.score);
+                displayResults(results, jobDesc);
+                createConfetti();
+                
+            } catch (error) {
+                alert("Error processing files: " + error.message);
+            } finally {
+                submitBtn.innerHTML = '<i class="fas fa-play me-2" aria-hidden="true"></i> Rank Candidates';
+                spinner.classList.add('d-none');
+            }
+        });
+        
+        function createConfetti() {
+            for (let i = 0; i < 100; i++) {
+                const confetti = document.createElement('div');
+                confetti.className = 'confetti';
+                confetti.style.left = Math.random() * 100 + 'vw';
+                confetti.style.backgroundColor = getRandomColor();
+                confetti.style.width = Math.random() * 10 + 5 + 'px';
+                confetti.style.height = Math.random() * 10 + 5 + 'px';
+                document.body.appendChild(confetti);
+                
+                setTimeout(() => {
+                    confetti.remove();
+                }, 5000);
+            }
+        }
+        
+        function getRandomColor() {
+            const colors = ['#4361ee', '#3f37c9', '#4895ef', '#4cc9f0', '#7209b7'];
+            return colors[Math.floor(Math.random() * colors.length)];
+        }
+        
+        function displayResults(candidates, jobDesc) {
+            const resultsSection = document.getElementById('results');
+            resultsSection.style.display = 'block';
+            
+            // Scroll to results
+            resultsSection.scrollIntoView({ behavior: 'smooth' });
+            
+            // Display top candidate
+            const topCandidate = candidates[0];
+            document.getElementById('top-candidate-heading').textContent = topCandidate.filename;
+            document.getElementById('top-candidate-progress').style.width = (topCandidate.score * 100) + '%';
+            document.getElementById('top-candidate-progress').setAttribute('aria-valuenow', topCandidate.score * 100);
+            document.getElementById('top-candidate-score').textContent = 'Match Score: ' + (topCandidate.score * 100).toFixed(0) + '%';
+            
+            const topSkillsContainer = document.getElementById('top-candidate-skills');
+            topSkillsContainer.innerHTML = '';
+            topCandidate.skills.slice(0, 5).forEach(skill => {
+                const skillBadge = document.createElement('span');
+                skillBadge.className = 'skill-badge';
+                skillBadge.textContent = skill;
+                topSkillsContainer.appendChild(skillBadge);
+            });
+            
+            // Display all candidates
+            const candidatesList = document.getElementById('candidates-list');
+            candidatesList.innerHTML = '';
+            
+            candidates.forEach((candidate, index) => {
+                const col = document.createElement('div');
+                col.className = 'col-md-6 col-lg-4';
+                col.setAttribute('role', 'listitem');
+                
+                const card = document.createElement('div');
+                card.className = 'card p-3 h-100 candidate-card animate__animated animate__fadeInUp';
+                card.classList.add(`animation-delay-${index * 100}ms`);
+                
+                const cardBody = document.createElement('div');
+                cardBody.className = 'card-body d-flex flex-column';
+                
+                const title = document.createElement('h4');
+                title.className = 'card-title h5';
+                title.innerHTML = `<span class="badge bg-primary me-2">#${index + 1}</span> ${candidate.filename}`;
+                
+                const progress = document.createElement('div');
+                progress.className = 'progress mt-3 mb-2';
+                progress.setAttribute('role', 'progressbar');
+                progress.setAttribute('aria-valuemin', '0');
+                progress.setAttribute('aria-valuemax', '100');
+                progress.setAttribute('aria-valuenow', candidate.score * 100);
+                progress.innerHTML = `
+                    <div class="progress-bar" style="width: ${candidate.score * 100}%"></div>
+                `;
+                
+                const score = document.createElement('div');
+                score.className = 'd-flex justify-content-between mb-3';
+                score.innerHTML = `
+                    <small class="text-muted">Match Score</small>
+                    <small class="fw-bold" style="color: var(--primary);">${(candidate.score * 100).toFixed(0)}%</small>
+                `;
+                
+                const skillsTitle = document.createElement('h5');
+                skillsTitle.className = 'mt-auto mb-2 h6';
+                skillsTitle.textContent = 'Key Skills:';
+                
+                const skills = document.createElement('div');
+                skills.className = 'd-flex flex-wrap';
+                candidate.skills.slice(0, 5).forEach(skill => {
+                    const skillBadge = document.createElement('span');
+                    skillBadge.className = 'skill-badge';
+                    skillBadge.textContent = skill;
+                    skills.appendChild(skillBadge);
+                });
+                
+                // Add cover letter section
+                const coverLetterContainer = document.createElement('div');
+                coverLetterContainer.className = 'cover-letter-container';
+                
+                const coverLetterToggle = document.createElement('button');
+                coverLetterToggle.className = 'cover-letter-toggle';
+                coverLetterToggle.innerHTML = '<i class="fas fa-envelope me-2"></i> Generate Cover Letter';
+                coverLetterToggle.onclick = function() {
+                    generateCoverLetter(candidate, jobDesc, coverLetterContent, coverLetterToggle);
+                };
+                
+                const coverLetterContent = document.createElement('div');
+                coverLetterContent.className = 'cover-letter';
+                coverLetterContent.style.display = 'none';
+                
+                coverLetterContainer.appendChild(coverLetterToggle);
+                coverLetterContainer.appendChild(coverLetterContent);
+                cardBody.appendChild(coverLetterContainer);
+                
+                // Add view button
+                const viewBtn = document.createElement('button');
+                viewBtn.className = 'btn btn-sm btn-outline-primary w-100 mt-3';
+                viewBtn.innerHTML = '<i class="fas fa-eye me-2" aria-hidden="true"></i> View Details';
+                viewBtn.onclick = function() {
+                    viewCandidateDetails(candidate, jobDesc);
+                };
+                
+                cardBody.appendChild(title);
+                cardBody.appendChild(progress);
+                cardBody.appendChild(score);
+                cardBody.appendChild(skillsTitle);
+                cardBody.appendChild(skills);
+                cardBody.appendChild(viewBtn);
+                card.appendChild(cardBody);
+                col.appendChild(card);
+                candidatesList.appendChild(col);
+            });
+        }
+        
+        function generateCoverLetter(candidate, jobDesc, contentElement, toggleButton) {
+            // Show loading state
+            contentElement.innerHTML = '<div class="cover-letter-loading"><i class="fas fa-spinner spinner me-2"></i> Generating cover letter...</div>';
+            contentElement.style.display = 'block';
+            if (toggleButton) {
+                toggleButton.innerHTML = '<i class="fas fa-sync-alt me-2"></i> Regenerate';
+            }
+            
+            // Simulate processing delay
+            setTimeout(() => {
+                // Extract candidate name from filename (simple heuristic)
+                const name = candidate.filename.split('_')[0] || 'Candidate';
+                const topSkills = candidate.skills.slice(0, 3).join(', ');
+                
+                // Extract job title from description (first line)
+                const jobTitle = jobDesc.split('\n')[0] || 'the position';
+                
+                const coverLetter = `Dear Hiring Manager,
+
+I am excited to apply for ${jobTitle}. My experience with ${topSkills} makes me a strong candidate for this role.
+
+In my previous positions, I've successfully:
+- Applied ${candidate.skills[0]} to solve complex problems
+- Collaborated using ${candidate.skills[1]}
+- Developed expertise in ${candidate.skills[2]}
+
+I'm particularly drawn to this opportunity because it aligns perfectly with my skills and experience. I would welcome the chance to discuss how I can contribute to your team.
+
+Sincerely,
+${name}`;
+                
+                contentElement.innerHTML = coverLetter;
+                
+                // Add download button
+                const actions = document.createElement('div');
+                actions.className = 'cover-letter-actions';
+                actions.innerHTML = `
+                    <button class="btn btn-sm btn-outline-primary" onclick="downloadCoverLetter('${candidate.filename.replace('.', '_')}', this.parentElement.previousSibling.textContent)">
+                        <i class="fas fa-download me-2"></i> Download
+                    </button>
+                    <button class="btn btn-sm btn-outline-secondary" onclick="copyToClipboard(this.parentElement.previousSibling.textContent, this)">
+                        <i class="fas fa-copy me-2"></i> Copy
+                    </button>
+                `;
+                
+                contentElement.appendChild(actions);
+            }, 1000);
+        }
+        
+        function downloadCoverLetter(filename, content) {
+            const blob = new Blob([content], { type: 'text/plain' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `Cover_Letter_${filename}.txt`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+        
+        function copyToClipboard(text, button) {
+            navigator.clipboard.writeText(text).then(() => {
+                const originalHtml = button.innerHTML;
+                button.innerHTML = '<i class="fas fa-check me-2"></i> Copied!';
+                setTimeout(() => {
+                    button.innerHTML = originalHtml;
+                }, 2000);
+            });
+        }
+        
+        function viewCandidateDetails(candidate, jobDesc) {
+            // Create modal
+            const modal = document.createElement('div');
+            modal.className = 'modal fade';
+            modal.id = 'candidateModal';
+            modal.tabIndex = '-1';
+            modal.setAttribute('aria-labelledby', 'candidateModalLabel');
+            modal.setAttribute('aria-hidden', 'true');
+            
+            modal.innerHTML = `
+                <div class="modal-dialog modal-lg modal-dialog-centered">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h5 class="modal-title" id="candidateModalLabel">${candidate.filename}</h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                        </div>
+                        <div class="modal-body">
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <h6>Match Score</h6>
+                                    <div class="progress mb-3">
+                                        <div class="progress-bar" style="width: ${candidate.score * 100}%"></div>
+                                    </div>
+                                    <p>${(candidate.score * 100).toFixed(0)}% match</p>
+                                    
+                                    <h6 class="mt-4">Key Skills</h6>
+                                    <div class="d-flex flex-wrap">
+                                        ${candidate.skills.map(skill => `<span class="skill-badge">${skill}</span>`).join('')}
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <h6>Generate Cover Letter</h6>
+                                    <button class="btn btn-primary w-100" onclick="generateModalCoverLetter('${encodeURIComponent(JSON.stringify(candidate))}', '${encodeURIComponent(jobDesc)}')">
+                                        <i class="fas fa-envelope me-2"></i> Generate
+                                    </button>
+                                    <div id="modalCoverLetter" class="cover-letter mt-3" style="display: none;"></div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            document.body.appendChild(modal);
+            const modalInstance = new bootstrap.Modal(modal);
+            modalInstance.show();
+            
+            // Remove modal after it's closed
+            modal.addEventListener('hidden.bs.modal', function() {
+                document.body.removeChild(modal);
+            });
+        }
+        
+        function generateModalCoverLetter(candidateJson, jobDesc) {
+            const candidate = JSON.parse(decodeURIComponent(candidateJson));
+            const jobDescription = decodeURIComponent(jobDesc);
+            const contentElement = document.getElementById('modalCoverLetter');
+            generateCoverLetter(candidate, jobDescription, contentElement, null);
+            contentElement.style.display = 'block';
+        }
+        
+        // Download button
+        document.getElementById('downloadBtn').addEventListener('click', function() {
+            alert('Export functionality would be implemented here to download results as CSV or PDF');
+        });
+
+        // Dark Mode Toggle
+        document.getElementById('darkModeToggle').addEventListener('change', function() {
+            document.body.classList.toggle('dark-mode', this.checked);
+            localStorage.setItem('darkMode', this.checked);
+            
+            // Update icon
+            const icon = this.nextElementSibling.querySelector('i');
+            if (this.checked) {
+                icon.classList.replace('fa-moon', 'fa-sun');
+            } else {
+                icon.classList.replace('fa-sun', 'fa-moon');
+            }
+        });
+
+        // Check for saved preference
+        if (localStorage.getItem('darkMode') === 'true') {
+            document.getElementById('darkModeToggle').checked = true;
+            document.body.classList.add('dark-mode');
+            document.getElementById('darkModeToggle').nextElementSibling.querySelector('i').classList.replace('fa-moon', 'fa-sun');
+        }
+
+        // Demo and Learn More buttons
+        function showDemoAlert() {
+            alert('This would show a demo video in a real implementation');
+        }
+
+        function showLearnMoreAlert() {
+            alert('This would show more information about the product');
+        }
+    </script>
+</body>
+</html>
